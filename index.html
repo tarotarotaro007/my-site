@@ -1,0 +1,1333 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="月謝管理">
+<title>そろばん月謝管理</title>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.mini.min.js"></script>
+<style>
+  :root {
+    --primary: #1a6bac; --primary-dark: #145490; --accent: #e67e22;
+    --success: #27ae60; --danger: #e74c3c;
+    --light: #f4f6f8; --border: #dde2e8; --text: #2c3e50; --text-sub: #7f8c8d;
+    --nogata: #2980b9; --kurate: #8e44ad;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { font-family: -apple-system, 'Helvetica Neue', sans-serif; background: var(--light); color: var(--text); font-size: 15px; min-height: 100dvh; }
+
+  .header { background: var(--primary); color: white; padding: 12px 16px; padding-top: max(12px, env(safe-area-inset-top)); display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+  .header-left h1 { font-size: 17px; font-weight: 700; }
+  .header-left p { font-size: 11px; opacity: 0.8; margin-top: 1px; }
+  .header-btns { display: flex; gap: 4px; }
+  .btn-icon { background: none; border: none; color: white; font-size: 22px; padding: 6px 8px; cursor: pointer; border-radius: 8px; }
+  .btn-icon:active { background: rgba(255,255,255,0.2); }
+
+  .nav { display: flex; background: white; border-bottom: 1px solid var(--border); position: sticky; top: 56px; z-index: 99; }
+  .nav-tab { flex: 1; padding: 10px 4px 8px; text-align: center; font-size: 11px; color: var(--text-sub); border: none; background: none; cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.2s; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .nav-tab .icon { font-size: 20px; }
+  .nav-tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+
+  .page { display: none; padding-bottom: max(80px, calc(80px + env(safe-area-inset-bottom))); }
+  .page.active { display: block; }
+
+  .section { background: white; margin: 12px; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+  .section-header { padding: 12px 16px; background: var(--light); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .section-title { font-size: 13px; font-weight: 600; color: var(--text-sub); text-transform: uppercase; letter-spacing: 0.5px; }
+
+  .month-selector { display: flex; align-items: center; justify-content: center; gap: 16px; padding: 12px 16px; background: white; margin: 12px; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+  .month-selector button { background: var(--light); border: none; width: 40px; height: 40px; border-radius: 50%; font-size: 22px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: 700; }
+  .month-selector button:active { background: var(--border); }
+  .month-label { font-size: 18px; font-weight: 700; min-width: 130px; text-align: center; }
+
+  .student-item { display: flex; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border); gap: 12px; cursor: pointer; }
+  .student-item:last-child { border-bottom: none; }
+  .student-item:active { background: var(--light); }
+  .student-avatar { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; color: white; flex-shrink: 0; }
+  .avatar-nogata { background: var(--nogata); } .avatar-kurate { background: var(--kurate); }
+  .student-info { flex: 1; min-width: 0; }
+  .student-name { font-weight: 600; font-size: 15px; }
+  .student-meta { font-size: 12px; color: var(--text-sub); margin-top: 2px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+  .student-fee { text-align: right; flex-shrink: 0; }
+  .fee-amount { font-size: 15px; font-weight: 600; }
+  .fee-label { font-size: 11px; color: var(--text-sub); }
+
+  .pay-badge { font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 20px; }
+  .paid { background: #d5f5e3; color: var(--success); } .unpaid { background: #fde8e8; color: var(--danger); }
+
+  .pay-item { display: flex; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border); gap: 12px; }
+  .pay-item:last-child { border-bottom: none; }
+  .classroom-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .dot-nogata { background: var(--nogata); } .dot-kurate { background: var(--kurate); }
+
+  .toggle { position: relative; width: 48px; height: 28px; cursor: pointer; flex-shrink: 0; }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider { position: absolute; inset: 0; background: #ccc; border-radius: 28px; transition: 0.3s; }
+  .toggle-slider:before { content: ''; position: absolute; height: 22px; width: 22px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.3s; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+  .toggle input:checked + .toggle-slider { background: var(--success); }
+  .toggle input:checked + .toggle-slider:before { transform: translateX(20px); }
+
+  .fab { position: fixed; bottom: max(24px, calc(24px + env(safe-area-inset-bottom))); right: 20px; width: 56px; height: 56px; background: var(--accent); border-radius: 50%; border: none; color: white; font-size: 28px; cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; z-index: 200; }
+  .fab:active { transform: scale(0.95); }
+
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 500; align-items: flex-end; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: white; border-radius: 20px 20px 0 0; width: 100%; max-height: 92dvh; overflow-y: auto; padding-bottom: max(24px, env(safe-area-inset-bottom)); }
+  .modal-handle { width: 40px; height: 4px; background: var(--border); border-radius: 2px; margin: 12px auto 0; }
+  .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+  .modal-title { font-size: 17px; font-weight: 700; }
+  .modal-close { background: var(--light); border: none; width: 32px; height: 32px; border-radius: 50%; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .modal-body { padding: 16px 20px; }
+  .modal-footer { padding: 12px 20px 0; display: flex; gap: 10px; }
+
+  .form-group { margin-bottom: 16px; }
+  .form-label { font-size: 13px; font-weight: 600; color: var(--text-sub); margin-bottom: 6px; display: block; }
+  .form-input { width: 100%; padding: 12px 14px; border: 1.5px solid var(--border); border-radius: 10px; font-size: 16px; font-family: inherit; color: var(--text); background: white; -webkit-appearance: none; }
+  .form-input:focus { outline: none; border-color: var(--primary); }
+  .form-select { width: 100%; padding: 12px 36px 12px 14px; border: 1.5px solid var(--border); border-radius: 10px; font-size: 16px; font-family: inherit; color: var(--text); background: white url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%2395a5a6' d='M6 8L0 0h12z'/%3E%3C/svg%3E") no-repeat right 14px center; -webkit-appearance: none; }
+  .form-select:focus { outline: none; border-color: var(--primary); }
+  .form-radio-group { display: flex; gap: 8px; }
+  .form-radio { flex: 1; }
+  .form-radio input { display: none; }
+  .form-radio label { display: block; padding: 12px 10px; text-align: center; border: 1.5px solid var(--border); border-radius: 10px; cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.2s; }
+  .form-radio input:checked + label { border-color: var(--primary); background: #e8f2fb; color: var(--primary); font-weight: 700; }
+
+  .fee-stepper { display: flex; align-items: stretch; border: 1.5px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .fee-stepper:focus-within { border-color: var(--primary); }
+  .step-btn { width: 52px; border: none; background: var(--light); font-size: 22px; font-weight: 700; cursor: pointer; flex-shrink: 0; color: var(--primary); display: flex; align-items: center; justify-content: center; min-height: 50px; padding: 0; }
+  .step-btn:active { background: var(--border); }
+  .step-input { flex: 1; border: none; border-left: 1px solid var(--border); border-right: 1px solid var(--border); padding: 12px 4px; font-size: 20px; font-weight: 700; text-align: center; color: var(--text); font-family: inherit; background: white; min-width: 0; -webkit-appearance: none; }
+  .step-input:focus { outline: none; }
+  .step-input.sm { font-size: 16px; }
+
+  .btn { padding: 13px 20px; border-radius: 12px; border: none; font-size: 16px; font-weight: 600; cursor: pointer; flex: 1; font-family: inherit; }
+  .btn-primary { background: var(--primary); color: white; } .btn-primary:active { background: var(--primary-dark); }
+  .btn-success { background: var(--success); color: white; }
+  .btn-outline { background: white; color: var(--text); border: 1.5px solid var(--border); }
+
+  .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px; }
+  .summary-card { background: white; border-radius: 12px; padding: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+  .summary-card.full { grid-column: 1/-1; }
+  .summary-card-label { font-size: 11px; color: var(--text-sub); font-weight: 600; margin-bottom: 6px; }
+  .summary-card-value { font-size: 22px; font-weight: 700; }
+  .summary-card-value.success { color: var(--success); } .summary-card-value.danger { color: var(--danger); } .summary-card-value.primary { color: var(--primary); }
+
+  .filter-bar { display: flex; gap: 8px; padding: 12px 12px 0; flex-wrap: wrap; }
+  .filter-btn { padding: 6px 14px; border-radius: 20px; border: 1.5px solid var(--border); background: white; font-size: 13px; font-weight: 500; cursor: pointer; color: var(--text-sub); }
+  .filter-btn.active { background: var(--primary); color: white; border-color: var(--primary); font-weight: 600; }
+  .filter-btn.nogata.active { background: var(--nogata); border-color: var(--nogata); }
+  .filter-btn.kurate.active { background: var(--kurate); border-color: var(--kurate); }
+
+  .sort-bar { display: flex; gap: 6px; padding: 6px 12px 10px; align-items: center; }
+  .sort-label { font-size: 12px; color: var(--text-sub); white-space: nowrap; }
+  .sort-btn { padding: 5px 12px; border-radius: 20px; border: 1.5px solid var(--border); background: white; font-size: 12px; font-weight: 500; cursor: pointer; color: var(--text-sub); white-space: nowrap; }
+  .sort-btn.active { background: var(--text); color: white; border-color: var(--text); font-weight: 600; }
+
+  .empty { text-align: center; padding: 48px 24px; color: var(--text-sub); }
+  .empty-icon { font-size: 48px; margin-bottom: 12px; }
+
+  .pay-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+  .btn-pay { padding: 7px 14px; border-radius: 20px; border: none; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .btn-pay-do { background: var(--success); color: white; } .btn-pay-undo { background: var(--light); color: var(--text-sub); border: 1px solid var(--border); }
+  .btn-edit-pay { background: none; border: none; font-size: 18px; cursor: pointer; padding: 4px 6px; }
+
+  .classroom-tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; }
+  .tag-nogata { background: #d6eaf8; color: var(--nogata); } .tag-kurate { background: #e8daef; color: var(--kurate); }
+  .fee-type-tag { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #fef9e7; color: var(--accent); font-weight: 500; }
+  .grade-tag { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #e8f8f5; color: #1a8a6e; font-weight: 600; }
+
+  .mt-12 { margin-top: 12px; }
+  .danger-zone { margin: 16px 20px 0; }
+  .danger-btn { width: 100%; padding: 13px; border-radius: 12px; background: #fde8e8; color: var(--danger); border: none; font-size: 15px; font-weight: 600; cursor: pointer; }
+
+  .special-fee-row { display: flex; gap: 8px; align-items: center; }
+  .btn-add-small { padding: 0 14px; border-radius: 10px; background: var(--primary); color: white; border: none; font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap; height: 50px; flex-shrink: 0; }
+  .fee-list { margin-top: 8px; }
+  .fee-list-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--light); border-radius: 8px; margin-bottom: 6px; font-size: 13px; }
+  .fee-list-item button { background: none; border: none; color: var(--danger); font-size: 16px; cursor: pointer; padding: 0 4px; }
+
+  .course-item { display: flex; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border); gap: 12px; }
+  .course-item:last-child { border-bottom: none; }
+  .course-item-info { flex: 1; }
+  .course-item-name { font-weight: 600; font-size: 15px; }
+  .course-item-fee { font-size: 13px; color: var(--text-sub); margin-top: 2px; }
+  .course-edit-btn { background: var(--light); border: none; padding: 6px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--primary); }
+  .add-course-form { padding: 16px; background: #f8f9fa; border-top: 1px solid var(--border); }
+  .add-course-row { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
+
+  .mat-setting-box { background: #fff8f0; border: 1.5px solid #f5cba7; border-radius: 10px; padding: 14px; }
+  .month-toggle { display: flex; gap: 6px; flex-wrap: wrap; }
+  .month-chip { width: 40px; height: 40px; border-radius: 50%; border: 1.5px solid var(--border); background: white; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--text-sub); display: flex; align-items: center; justify-content: center; }
+  .month-chip.on { background: var(--danger); border-color: var(--danger); color: white; }
+
+  .settings-section { margin-bottom: 20px; }
+  .settings-section-title { font-size: 13px; font-weight: 600; color: var(--text-sub); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  .import-drop-zone { border: 2px dashed var(--border); border-radius: 14px; padding: 32px 20px; text-align: center; cursor: pointer; transition: all 0.2s; background: var(--light); }
+  .import-drop-zone.drag-over { border-color: var(--primary); background: #e8f2fb; }
+  .import-drop-zone .drop-icon { font-size: 40px; margin-bottom: 10px; }
+  .import-drop-zone p { color: var(--text-sub); font-size: 14px; }
+  .import-drop-zone strong { color: var(--primary); }
+
+  .preview-table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--border); margin-top: 12px; }
+  .preview-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 480px; }
+  .preview-table th { background: var(--primary); color: white; padding: 8px 12px; text-align: left; font-weight: 600; white-space: nowrap; }
+  .preview-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  .preview-table tr:last-child td { border-bottom: none; }
+  .preview-table tr.row-ok td { background: white; }
+  .preview-table tr.row-warn td { background: #fef9e7; }
+  .preview-table tr.row-err td { background: #fde8e8; }
+  .row-tag { display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 8px; }
+  .row-tag.new { background: #d5f5e3; color: var(--success); }
+  .row-tag.update { background: #d6eaf8; color: var(--nogata); }
+  .row-tag.err { background: #fde8e8; color: var(--danger); }
+
+  .import-summary { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+  .import-stat { flex: 1; min-width: 80px; background: var(--light); border-radius: 10px; padding: 10px 12px; text-align: center; }
+  .import-stat-num { font-size: 22px; font-weight: 700; }
+  .import-stat-label { font-size: 11px; color: var(--text-sub); margin-top: 2px; }
+
+  .info-box { background: #e8f2fb; border-radius: 10px; padding: 12px 14px; font-size: 13px; color: var(--primary); margin-bottom: 12px; line-height: 1.6; }
+  .warn-box { background: #fef9e7; border-radius: 10px; padding: 12px 14px; font-size: 13px; color: #b7770d; margin-bottom: 12px; line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <h1>そろばん月謝管理</h1>
+    <p id="headerSub"></p>
+  </div>
+  <div class="header-btns">
+    <button class="btn-icon" onclick="openCourses()">⚙️</button>
+    <button class="btn-icon" onclick="showExport()">📊</button>
+  </div>
+</div>
+
+<nav class="nav">
+  <button class="nav-tab active" onclick="switchTab('students')" id="tab-students"><span class="icon">👥</span>生徒一覧</button>
+  <button class="nav-tab" onclick="switchTab('payments')" id="tab-payments"><span class="icon">💴</span>月謝管理</button>
+  <button class="nav-tab" onclick="switchTab('summary')" id="tab-summary"><span class="icon">📈</span>集計</button>
+</nav>
+
+<div class="page active" id="page-students">
+  <div class="filter-bar">
+    <button class="filter-btn active" onclick="filterStudents('all',this)">全員</button>
+    <button class="filter-btn nogata" onclick="filterStudents('頓野',this)">頓野</button>
+    <button class="filter-btn kurate" onclick="filterStudents('鞍手',this)">鞍手</button>
+  </div>
+  <div class="sort-bar">
+    <span class="sort-label">並び替え：</span>
+    <button class="sort-btn active" id="sort-name" onclick="sortStudents('name',this)">名前</button>
+    <button class="sort-btn" id="sort-course" onclick="sortStudents('course',this)">コース</button>
+    <button class="sort-btn" id="sort-grade" onclick="sortStudents('grade',this)">学年</button>
+  </div>
+  <div id="furiganaHint" style="display:none;margin:0 12px 4px;padding:8px 12px;background:#fef9e7;border-radius:8px;font-size:12px;color:#b7770d;">
+    💡 漢字の名前はふりがなを登録するとあいうえお順になります（<span id="furiganaHintCount"></span>名 未登録）
+  </div>
+  <div id="studentList"></div>
+</div>
+
+<div class="page" id="page-payments">
+  <div class="month-selector">
+    <button onclick="changeMonth(-1)">‹</button>
+    <div class="month-label" id="monthLabel"></div>
+    <button onclick="changeMonth(1)">›</button>
+  </div>
+  <div class="filter-bar">
+    <button class="filter-btn active" onclick="filterPayments('all',this)">全員</button>
+    <button class="filter-btn nogata" onclick="filterPayments('頓野',this)">頓野</button>
+    <button class="filter-btn kurate" onclick="filterPayments('鞍手',this)">鞍手</button>
+    <button class="filter-btn" onclick="filterPayments('unpaid',this)">未収のみ</button>
+  </div>
+  <div class="sort-bar">
+    <span class="sort-label">並び替え：</span>
+    <button class="sort-btn active" onclick="sortPayments('name',this)">名前</button>
+    <button class="sort-btn" onclick="sortPayments('course',this)">コース</button>
+    <button class="sort-btn" onclick="sortPayments('grade',this)">学年</button>
+  </div>
+  <div id="paymentList"></div>
+</div>
+
+<div class="page" id="page-summary">
+  <div class="month-selector">
+    <button onclick="changeSummaryMonth(-1)">‹</button>
+    <div class="month-label" id="summaryMonthLabel"></div>
+    <button onclick="changeSummaryMonth(1)">›</button>
+  </div>
+  <div id="summaryContent"></div>
+</div>
+
+<button class="fab" id="fab" onclick="openAddStudent()">＋</button>
+
+<!-- Modal: Add/Edit Student -->
+<div class="modal-overlay" id="modalStudent">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title" id="modalStudentTitle">生徒を追加</div>
+      <button class="modal-close" onclick="closeModal('modalStudent')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="editStudentId">
+      <div class="form-group">
+        <label class="form-label">お名前</label>
+        <input class="form-input" id="sName" type="text" placeholder="例：田中 太郎" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label class="form-label">ふりがな（任意・並び替えに使用）</label>
+        <input class="form-input" id="sFurigana" type="text" placeholder="例：たなか たろう" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label class="form-label">教室</label>
+        <div class="form-radio-group">
+          <div class="form-radio"><input type="radio" name="sClassroom" id="cls-nogata" value="頓野"><label for="cls-nogata">📍 頓野</label></div>
+          <div class="form-radio"><input type="radio" name="sClassroom" id="cls-kurate" value="鞍手"><label for="cls-kurate">📍 鞍手</label></div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">コース</label>
+        <select class="form-select" id="sFeeType" onchange="onCourseChange()"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">月謝（円）</label>
+        <div class="fee-stepper">
+          <button type="button" class="step-btn" onclick="stepFee('sMonthlyFee',-1000)">－</button>
+          <input class="step-input" id="sMonthlyFee" type="number" step="1000" inputmode="numeric" value="5000">
+          <button type="button" class="step-btn" onclick="stepFee('sMonthlyFee',1000)">＋</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">生年月日（任意）</label>
+        <input class="form-input" id="sBirthDate" type="date" onchange="onBirthDateChange()">
+      </div>
+      <div class="form-group">
+        <label class="form-label">学年（任意）</label>
+        <select class="form-select" id="sGrade">
+          <option value="">未設定</option>
+          <option value="未就学">未就学</option>
+          <option value="小1">小1</option><option value="小2">小2</option>
+          <option value="小3">小3</option><option value="小4">小4</option>
+          <option value="小5">小5</option><option value="小6">小6</option>
+          <option value="中1">中1</option><option value="中2">中2</option>
+          <option value="中3">中3</option>
+          <option value="高1">高1</option><option value="高2">高2</option>
+          <option value="高3">高3</option>
+          <option value="その他">その他</option>
+        </select>
+        <div id="gradeAutoNote" style="font-size:12px;color:var(--success);margin-top:4px;display:none;">✔ 生年月日から自動計算</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">備考</label>
+        <input class="form-input" id="sNote" type="text" placeholder="例：兄弟割引など">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" type="button" onclick="closeModal('modalStudent')">キャンセル</button>
+      <button class="btn btn-primary" type="button" onclick="saveStudent()">保存</button>
+    </div>
+    <div class="danger-zone" id="deleteZone" style="display:none;">
+      <button class="danger-btn" type="button" onclick="confirmDeleteStudent()">この生徒を削除する</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Payment Detail -->
+<div class="modal-overlay" id="modalPayment">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title" id="modalPayTitle"></div>
+      <button class="modal-close" onclick="closeModal('modalPayment')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="payStudentId">
+      <div class="form-group">
+        <label class="form-label">月謝（円）</label>
+        <div class="fee-stepper">
+          <button type="button" class="step-btn" onclick="stepFee('payAmount',-1000)">－</button>
+          <input class="step-input" id="payAmount" type="number" step="1000" inputmode="numeric">
+          <button type="button" class="step-btn" onclick="stepFee('payAmount',1000)">＋</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">受領状況</label>
+        <div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--light);border-radius:10px;">
+          <label class="toggle"><input type="checkbox" id="payPaid" onchange="onPayPaidChange()"><span class="toggle-slider"></span></label>
+          <span id="payPaidLabel" style="font-weight:600;font-size:16px;">未収</span>
+        </div>
+      </div>
+      <div class="form-group" id="payDateGroup" style="display:none;">
+        <label class="form-label">受領日</label>
+        <input class="form-input" id="payDate" type="date">
+      </div>
+      <div class="form-group">
+        <label class="form-label">追加費用（入会金・教材費など）</label>
+        <div class="special-fee-row">
+          <input class="form-input" id="extraFeeLabel" type="text" placeholder="費用名" style="flex:1;">
+          <div class="fee-stepper" style="flex:0 0 150px;">
+            <button type="button" class="step-btn" style="width:38px;" onclick="stepFee('extraFeeAmount',-500)">－</button>
+            <input class="step-input sm" id="extraFeeAmount" type="number" step="500" inputmode="numeric" placeholder="0">
+            <button type="button" class="step-btn" style="width:38px;" onclick="stepFee('extraFeeAmount',500)">＋</button>
+          </div>
+          <button class="btn-add-small" type="button" onclick="addExtraFee()">追加</button>
+        </div>
+        <div class="fee-list" id="extraFeeList"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">メモ</label>
+        <input class="form-input" id="payNote" type="text" placeholder="自由記入">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" type="button" onclick="closeModal('modalPayment')">キャンセル</button>
+      <button class="btn btn-primary" type="button" onclick="savePayment()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Course & Settings -->
+<div class="modal-overlay" id="modalCourses">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title">コース・設定</div>
+      <button class="modal-close" onclick="closeModal('modalCourses')">✕</button>
+    </div>
+    <div class="modal-body" style="padding:0;">
+      <div style="padding:12px 16px 8px;background:var(--light);border-bottom:1px solid var(--border);"><span class="section-title">コース一覧</span></div>
+      <div id="courseList"></div>
+      <div class="add-course-form">
+        <div class="form-label">コースを追加</div>
+        <div class="add-course-row">
+          <input class="form-input" id="newCourseName" type="text" placeholder="コース名" style="flex:1;padding:10px 12px;font-size:15px;">
+          <div class="fee-stepper" style="flex:0 0 150px;">
+            <button type="button" class="step-btn" style="width:38px;" onclick="stepFee('newCourseFee',-1000)">－</button>
+            <input class="step-input sm" id="newCourseFee" type="number" step="1000" inputmode="numeric" placeholder="0">
+            <button type="button" class="step-btn" style="width:38px;" onclick="stepFee('newCourseFee',1000)">＋</button>
+          </div>
+          <button class="btn-add-small" type="button" onclick="addCourse()">追加</button>
+        </div>
+      </div>
+      <div style="padding:12px 16px 8px;margin-top:8px;background:var(--light);border-top:1px solid var(--border);border-bottom:1px solid var(--border);"><span class="section-title">教材費（自動追加）</span></div>
+      <div style="padding:16px;">
+        <div class="mat-setting-box">
+          <div style="font-size:13px;color:var(--text-sub);margin-bottom:8px;">指定した月に教材費を自動で追加します</div>
+          <div style="font-size:13px;font-weight:600;margin-bottom:6px;">対象月</div>
+          <div class="month-toggle" id="matMonthToggle"></div>
+          <div style="margin-top:12px;">
+            <div style="font-size:13px;font-weight:600;margin-bottom:6px;">金額（円）</div>
+            <div class="fee-stepper" style="max-width:200px;">
+              <button type="button" class="step-btn" onclick="stepFee('matFeeAmount',-500)">－</button>
+              <input class="step-input" id="matFeeAmount" type="number" step="500" inputmode="numeric">
+              <button type="button" class="step-btn" onclick="stepFee('matFeeAmount',500)">＋</button>
+            </div>
+          </div>
+          <button class="btn btn-primary" type="button" onclick="saveMatSettings()" style="margin-top:12px;padding:10px;font-size:14px;">設定を保存</button>
+        </div>
+      </div>
+    </div>
+    <div style="padding:8px 16px 4px;border-top:1px solid var(--border);"><p style="font-size:12px;color:var(--text-sub);">※ コース削除・名前変更は既存生徒データに影響しません</p></div>
+  </div>
+</div>
+
+<!-- Modal: Edit Course -->
+<div class="modal-overlay" id="modalEditCourse">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title">コースを編集</div>
+      <button class="modal-close" onclick="closeModal('modalEditCourse')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="editCourseId">
+      <div class="form-group">
+        <label class="form-label">コース名</label>
+        <input class="form-input" id="editCourseName" type="text">
+      </div>
+      <div class="form-group">
+        <label class="form-label">標準月謝（円）</label>
+        <div class="fee-stepper">
+          <button type="button" class="step-btn" onclick="stepFee('editCourseFee',-1000)">－</button>
+          <input class="step-input" id="editCourseFee" type="number" step="1000" inputmode="numeric">
+          <button type="button" class="step-btn" onclick="stepFee('editCourseFee',1000)">＋</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" type="button" onclick="closeModal('modalEditCourse')">キャンセル</button>
+      <button class="btn btn-primary" type="button" onclick="saveCourseEdit()">保存</button>
+    </div>
+    <div class="danger-zone">
+      <button class="danger-btn" type="button" onclick="deleteCourse()">このコースを削除する</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Export / Import -->
+<div class="modal-overlay" id="modalExport">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title">データ出力・取り込み</div>
+      <button class="modal-close" onclick="closeModal('modalExport')">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- Excel Import -->
+      <div class="settings-section">
+        <div class="settings-section-title">📥 生徒名簿 取り込み（Excel）</div>
+        <div class="info-box">
+          ExcelまたはCSVファイルから生徒名簿を一括取り込みできます。<br>
+          まず<strong>テンプレートをダウンロード</strong>してご利用ください。
+        </div>
+        <button class="btn btn-outline" type="button" onclick="downloadTemplate()" style="width:100%;margin-bottom:10px;">📋 テンプレートをダウンロード（.xlsx）</button>
+        <label class="import-drop-zone" id="dropZone">
+          <div class="drop-icon">📂</div>
+          <p><strong>タップしてファイルを選択</strong></p>
+          <p style="margin-top:4px;font-size:12px;">.xlsx / .xls / .csv に対応</p>
+          <input type="file" id="importFileInput" accept=".xlsx,.xls,.csv" style="display:none;" onchange="onImportFileSelected(event)">
+        </label>
+        <div id="xlsxWarning" style="display:none;" class="warn-box">
+          ⚠️ Excelファイルの読み込みにはインターネット接続が必要です（SheetJSライブラリ）。
+          接続できない場合は .csv 形式でお試しください。
+        </div>
+      </div>
+
+      <!-- 月次CSV -->
+      <div style="border-top:1px solid var(--border);padding-top:16px;" class="settings-section">
+        <div class="settings-section-title">📤 月次CSVエクスポート</div>
+        <div style="display:flex;gap:8px;">
+          <select class="form-select" id="exportYear" style="flex:1;"></select>
+          <select class="form-select" id="exportMonth" style="flex:1;">
+            <option value="1">1月</option><option value="2">2月</option><option value="3">3月</option>
+            <option value="4">4月</option><option value="5">5月</option><option value="6">6月</option>
+            <option value="7">7月</option><option value="8">8月</option><option value="9">9月</option>
+            <option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="button" onclick="exportCSV()" style="margin-top:10px;width:100%;">月次CSVダウンロード</button>
+      </div>
+
+      <!-- 年次CSV -->
+      <div style="border-top:1px solid var(--border);padding-top:16px;" class="settings-section">
+        <div class="settings-section-title">📅 年次CSVエクスポート（12ヶ月分）</div>
+        <div class="info-box" style="margin-bottom:10px;">1年分の収納状況を横並びで出力します。</div>
+        <select class="form-select" id="exportYearAnnual"></select>
+        <button class="btn btn-primary" type="button" onclick="exportAnnualCSV()" style="margin-top:10px;width:100%;">年次CSVダウンロード</button>
+      </div>
+
+      <!-- バックアップ -->
+      <div style="border-top:1px solid var(--border);padding-top:16px;" class="settings-section">
+        <div class="settings-section-title">🔒 アプリデータ バックアップ</div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline" type="button" style="flex:1;" onclick="exportJSON()">書き出し</button>
+          <label class="btn btn-outline" style="flex:1;display:flex;align-items:center;justify-content:center;cursor:pointer;">
+            読み込み<input type="file" accept=".json" style="display:none;" onchange="importJSON(event)">
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Import Preview -->
+<div class="modal-overlay" id="modalImportPreview">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title">取り込み確認</div>
+      <button class="modal-close" onclick="closeModal('modalImportPreview')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="import-summary" id="importSummary"></div>
+      <div class="preview-table-wrap">
+        <table class="preview-table" id="importPreviewTable"></table>
+      </div>
+      <div id="importErrorNote" style="margin-top:10px;font-size:12px;color:var(--danger);display:none;"></div>
+    </div>
+    <div class="modal-footer" style="flex-direction:column;gap:8px;">
+      <div style="display:flex;gap:8px;width:100%;">
+        <button class="btn btn-outline" type="button" onclick="closeModal('modalImportPreview')">キャンセル</button>
+        <button class="btn btn-success" type="button" id="importConfirmBtn" onclick="confirmImport()">取り込む</button>
+      </div>
+      <p style="font-size:12px;color:var(--text-sub);text-align:center;">同じ氏名の生徒は情報が更新されます</p>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== Storage =====
+const DB_KEY = 'soroban_db_v2';
+const DEFAULT_COURSES = [
+  { id:'c1', name:'そろばん', fee:5000 },
+  { id:'c2', name:'そろばん＋書写', fee:6000 }
+];
+const DEFAULT_MAT = { months:[1,5,9], amount:2000 };
+let _memDB = null;
+
+function loadDB() {
+  try {
+    const raw = localStorage.getItem(DB_KEY);
+    if (raw) {
+      const db = JSON.parse(raw);
+      if (!db.courses) db.courses = DEFAULT_COURSES.slice();
+      if (!db.matFee) db.matFee = Object.assign({}, DEFAULT_MAT);
+      return db;
+    }
+  } catch(e) {}
+  if (_memDB) return _memDB;
+  return { students:[], payments:[], courses:DEFAULT_COURSES.slice(), matFee:Object.assign({},DEFAULT_MAT) };
+}
+function saveDB(db) {
+  _memDB = db;
+  try { localStorage.setItem(DB_KEY, JSON.stringify(db)); } catch(e) {}
+}
+function getDB() { return loadDB(); }
+function uuid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+function getMatFee(month) { const db=getDB(); const c=db.matFee||DEFAULT_MAT; return c.months.includes(month)?(c.amount||0):0; }
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ===== Grade Calculation (Japanese school year rules) =====
+function calcGrade(birthDate) {
+  if (!birthDate) return '';
+  const bd = new Date(birthDate);
+  if (isNaN(bd.getTime())) return '';
+  const today = new Date();
+  // Current school year: April is month 4 (index 3)
+  const currentSchoolYear = today.getMonth() >= 3 ? today.getFullYear() : today.getFullYear() - 1;
+  // Cohort year: April 2 cutoff — born Apr 2 or later belongs to birth year cohort
+  const bm = bd.getMonth() + 1, bday = bd.getDate(), by = bd.getFullYear();
+  const cohort = (bm > 4 || (bm === 4 && bday >= 2)) ? by : by - 1;
+  // Grade 1 starts when currentSchoolYear === cohort + 7 (they turn 6 by Apr 1)
+  // grade = currentSchoolYear - cohort - 6
+  const grade = currentSchoolYear - cohort - 6;
+  if (grade < 1) return '未就学';
+  if (grade <= 6) return `小${grade}`;
+  if (grade <= 9) return `中${grade-6}`;
+  if (grade <= 12) return `高${grade-9}`;
+  return '卒業';
+}
+
+// ===== State =====
+let currentTab='students', studentFilter='all', payFilter='all', studentSort='name', paySort='name';
+let currentMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+let summaryMonth = new Date(currentMonth);
+let editingExtraFees = [];
+let pendingImportRows = [];
+
+// ===== Init =====
+function init() {
+  // Migrate v1 → v2
+  try {
+    const old = localStorage.getItem('soroban_db_v1');
+    if (old && !localStorage.getItem(DB_KEY)) {
+      const d = JSON.parse(old);
+      d.courses = DEFAULT_COURSES.slice(); d.matFee = Object.assign({},DEFAULT_MAT);
+      saveDB(d);
+    }
+  } catch(e) {}
+
+  // Data migrations within v2
+  const db = getDB();
+  let dirty = false;
+
+  // Rename 直方 → 頓野
+  db.students.forEach(s => {
+    if (s.classroom === '直方') { s.classroom = '頓野'; dirty = true; }
+  });
+
+  // Update default course fees and rename そろばんのみ → そろばん
+  db.courses.forEach(c => {
+    if (c.id === 'c1' && c.fee === 3000) { c.fee = 5000; dirty = true; }
+    if (c.id === 'c2' && c.fee === 4000) { c.fee = 6000; dirty = true; }
+    if (c.id === 'c1' && c.name === 'そろばんのみ') { c.name = 'そろばん'; dirty = true; }
+  });
+  db.students.forEach(s => {
+    if (s.feeType === 'そろばんのみ') { s.feeType = 'そろばん'; dirty = true; }
+  });
+
+  // Ensure student fields exist; strip 年 suffix from grade
+  db.students.forEach(s => {
+    if (!('birthDate' in s)) { s.birthDate = null; dirty = true; }
+    if (!('grade' in s)) { s.grade = ''; dirty = true; }
+    if (!('furigana' in s)) { s.furigana = ''; dirty = true; }
+    if (s.grade && s.grade.match(/^(小|中|高)\d+年$/)) { s.grade = s.grade.replace(/年$/, ''); dirty = true; }
+  });
+
+  if (dirty) saveDB(db);
+
+  updateHeaderSub(); updateMonthLabel(); renderStudents(); renderPayments(); renderSummary();
+  if (typeof XLSX === 'undefined') {
+    document.getElementById('xlsxWarning').style.display = 'block';
+  }
+}
+
+function updateHeaderSub() {
+  document.getElementById('headerSub').textContent = `生徒 ${getDB().students.length}名`;
+}
+
+// ===== Tabs =====
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('page-'+tab).classList.add('active');
+  document.getElementById('tab-'+tab).classList.add('active');
+  document.getElementById('fab').style.display = tab==='students'?'flex':'none';
+  if (tab==='payments') renderPayments();
+  if (tab==='summary') renderSummary();
+}
+
+// ===== Month =====
+function updateMonthLabel() {
+  const fmt = d => `${d.getFullYear()}年${d.getMonth()+1}月`;
+  document.getElementById('monthLabel').textContent = fmt(currentMonth);
+  document.getElementById('summaryMonthLabel').textContent = fmt(summaryMonth);
+}
+function changeMonth(d) {
+  currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth()+d, 1);
+  summaryMonth = new Date(currentMonth); updateMonthLabel(); renderPayments(); renderSummary();
+}
+function changeSummaryMonth(d) {
+  summaryMonth = new Date(summaryMonth.getFullYear(), summaryMonth.getMonth()+d, 1);
+  currentMonth = new Date(summaryMonth); updateMonthLabel(); renderSummary();
+}
+
+// ===== Stepper =====
+function stepFee(id, delta) {
+  const el = document.getElementById(id); if (!el) return;
+  el.value = Math.max(0, (parseInt(el.value)||0) + delta);
+}
+
+// ===== Students =====
+function filterStudents(f, btn) {
+  studentFilter = f;
+  document.querySelectorAll('#page-students .filter-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active'); renderStudents();
+}
+function sortStudents(s, btn) {
+  studentSort = s;
+  document.querySelectorAll('#page-students .sort-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active'); renderStudents();
+}
+function sortPayments(s, btn) {
+  paySort = s;
+  document.querySelectorAll('#page-payments .sort-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active'); renderPayments();
+}
+function gradeOrder(g) {
+  if (!g) return 999;
+  if (g==='未就学') return 0;
+  const m = g.match(/^(小|中|高)(\d+)$/);
+  if (!m) return 998;
+  return {'小':10,'中':20,'高':30}[m[1]] + parseInt(m[2]);
+}
+function sortKey(s) { return s.furigana || s.name; }
+function makeCmp(sort) {
+  if (sort==='course') return (a,b)=>a.feeType.localeCompare(b.feeType,'ja')||sortKey(a).localeCompare(sortKey(b),'ja');
+  if (sort==='grade')  return (a,b)=>gradeOrder(a.grade)-gradeOrder(b.grade)||sortKey(a).localeCompare(sortKey(b),'ja');
+  return (a,b)=>sortKey(a).localeCompare(sortKey(b),'ja');
+}
+function renderStudents() {
+  const db = getDB();
+  let students = db.students.filter(s=>studentFilter==='all'||s.classroom===studentFilter)
+    .slice().sort(makeCmp(studentSort));
+
+  // Show furigana hint when sorting by name and some students lack furigana
+  const noFuri = db.students.filter(s => !s.furigana).length;
+  const hint = document.getElementById('furiganaHint');
+  if (studentSort === 'name' && noFuri > 0 && db.students.length > 0) {
+    document.getElementById('furiganaHintCount').textContent = noFuri;
+    hint.style.display = 'block';
+  } else {
+    hint.style.display = 'none';
+  }
+
+  const el = document.getElementById('studentList');
+  if (!students.length) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">👤</div><p>${db.students.length===0?'＋ボタンで生徒を追加してください':'該当する生徒がいません'}</p></div>`;
+    return;
+  }
+  let html = '';
+  const groups = studentFilter==='all'
+    ? [['頓野教室',students.filter(s=>s.classroom==='頓野'),'nogata'],['鞍手教室',students.filter(s=>s.classroom==='鞍手'),'kurate']]
+    : [[studentFilter+'教室',students,studentFilter==='頓野'?'nogata':'kurate']];
+  groups.forEach(([title,list,cls])=>{
+    if (!list.length) return;
+    html += `<div class="section"><div class="section-header"><span class="section-title" style="color:var(--${cls})">${title}（${list.length}名）</span></div>`;
+    list.forEach(s=>{
+      const gradeLabel = s.grade ? `<span class="grade-tag">${esc(s.grade)}</span>` : '';
+      html += `<div class="student-item" onclick="openEditStudent('${s.id}')">
+        <div class="student-avatar avatar-${cls}">${s.name.charAt(0)}</div>
+        <div class="student-info">
+          ${s.furigana?`<div style="font-size:11px;color:var(--text-sub);margin-bottom:1px;">${esc(s.furigana)}</div>`:''}
+          <div class="student-name">${esc(s.name)}</div>
+          <div class="student-meta"><span class="fee-type-tag">${esc(s.feeType)}</span>${gradeLabel}${s.note?`<span style="font-size:11px;color:var(--accent);">📝 ${esc(s.note)}</span>`:''}</div>
+        </div>
+        <div class="student-fee"><div class="fee-amount">¥${s.monthlyFee.toLocaleString()}</div><div class="fee-label">月謝</div></div>
+      </div>`;
+    });
+    html += '</div>';
+  });
+  el.innerHTML = html;
+}
+
+// ===== Payments =====
+function filterPayments(f, btn) {
+  payFilter = f;
+  document.querySelectorAll('#page-payments .filter-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active'); renderPayments();
+}
+function payKey(sid,y,m) { return `${sid}_${y}_${m}`; }
+function getPay(db,sid,y,m) { return db.payments.find(p=>p.key===payKey(sid,y,m))||null; }
+
+function renderPayments() {
+  const db=getDB(), y=currentMonth.getFullYear(), m=currentMonth.getMonth()+1, matFee=getMatFee(m);
+  let students = db.students.slice().sort(makeCmp(paySort));
+  if (payFilter==='頓野'||payFilter==='鞍手') students=students.filter(s=>s.classroom===payFilter);
+  else if (payFilter==='unpaid') students=students.filter(s=>{const p=getPay(db,s.id,y,m);return !p||!p.paid;});
+  const el = document.getElementById('paymentList');
+  if (!students.length) { el.innerHTML=`<div class="empty"><div class="empty-icon">✅</div><p>該当する生徒がいません</p></div>`; return; }
+  let banner = matFee>0 ? `<div style="margin:0 12px;padding:10px 14px;background:#fff0eb;border-radius:10px;border:1px solid #f5cba7;font-size:13px;font-weight:600;color:var(--danger);display:flex;align-items:center;gap:6px;">📚 教材費月（+¥${matFee.toLocaleString()}）が月謝に加算されます</div>` : '';
+  const rg = (group,cls,label) => {
+    if (!group.length) return '';
+    let h = `<div class="section"><div class="section-header"><span class="section-title" style="color:var(--${cls})">${label}</span></div>`;
+    group.forEach(s=>{
+      const pay=getPay(db,s.id,y,m), paid=pay&&pay.paid;
+      const ext=pay&&pay.extraFees?pay.extraFees.reduce((a,e)=>a+e.amount,0):0;
+      const dispExt=ext+((!pay&&matFee>0)?matFee:0);
+      h+=`<div class="pay-item">
+        <div class="classroom-dot dot-${cls}"></div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:600;font-size:14px;">${esc(s.name)}</div>
+          <div style="font-size:11px;color:var(--text-sub);">¥${s.monthlyFee.toLocaleString()}${dispExt>0?` ＋¥${dispExt.toLocaleString()}`:''}</div>
+          ${pay&&pay.note?`<div style="font-size:11px;color:var(--accent);">📝 ${esc(pay.note)}</div>`:''}
+          ${paid&&pay.paidDate?`<div style="font-size:11px;color:var(--success);">受領 ${pay.paidDate}</div>`:''}
+        </div>
+        <div class="pay-actions">
+          <span class="pay-badge ${paid?'paid':'unpaid'}">${paid?'収納済':'未収'}</span>
+          <button class="btn-pay ${paid?'btn-pay-undo':'btn-pay-do'}" type="button" onclick="quickTogglePay('${s.id}',event)">${paid?'取消':'収納'}</button>
+          <button class="btn-edit-pay" type="button" onclick="openPayDetail('${s.id}')">✏️</button>
+        </div>
+      </div>`;
+    });
+    return h+'</div>';
+  };
+  let html=banner;
+  if (payFilter==='all'||payFilter==='unpaid') {
+    html+=rg(students.filter(s=>s.classroom==='頓野'),'nogata','頓野教室');
+    html+=rg(students.filter(s=>s.classroom==='鞍手'),'kurate','鞍手教室');
+  } else { html+=rg(students,payFilter==='頓野'?'nogata':'kurate',payFilter+'教室'); }
+  el.innerHTML = html||`<div class="empty"><div class="empty-icon">✅</div><p>全員収納済みです！</p></div>`;
+}
+
+function quickTogglePay(studentId, e) {
+  e.stopPropagation();
+  const db=getDB(), y=currentMonth.getFullYear(), m=currentMonth.getMonth()+1, k=payKey(studentId,y,m);
+  let pay=db.payments.find(p=>p.key===k);
+  const student=db.students.find(s=>s.id===studentId);
+  if (!pay) {
+    const mf=getMatFee(m);
+    pay={key:k,studentId,year:y,month:m,amount:student.monthlyFee,paid:false,paidDate:null,extraFees:mf>0?[{label:'教材費',amount:mf}]:[],note:''};
+    db.payments.push(pay);
+  }
+  pay.paid=!pay.paid; pay.paidDate=pay.paid?new Date().toISOString().slice(0,10):null;
+  saveDB(db); renderPayments(); renderSummary();
+}
+
+// ===== Payment Detail =====
+function openPayDetail(studentId) {
+  const db=getDB(), y=currentMonth.getFullYear(), m=currentMonth.getMonth()+1;
+  const student=db.students.find(s=>s.id===studentId);
+  const pay=getPay(db,studentId,y,m);
+  editingExtraFees=!pay?(getMatFee(m)>0?[{label:'教材費',amount:getMatFee(m)}]:[]):[...(pay.extraFees||[])];
+  document.getElementById('modalPayTitle').textContent=`${student.name} — ${y}年${m}月`;
+  document.getElementById('payStudentId').value=studentId;
+  document.getElementById('payAmount').value=pay?pay.amount:student.monthlyFee;
+  document.getElementById('payPaid').checked=pay?pay.paid:false;
+  document.getElementById('payDate').value=pay&&pay.paidDate?pay.paidDate:new Date().toISOString().slice(0,10);
+  document.getElementById('payNote').value=pay?(pay.note||''):'';
+  document.getElementById('extraFeeLabel').value=''; document.getElementById('extraFeeAmount').value='';
+  onPayPaidChange(); renderExtraFeeList(); openModal('modalPayment');
+}
+function onPayPaidChange() {
+  const p=document.getElementById('payPaid').checked;
+  document.getElementById('payPaidLabel').textContent=p?'収納済':'未収';
+  document.getElementById('payDateGroup').style.display=p?'block':'none';
+}
+function addExtraFee() {
+  const label=document.getElementById('extraFeeLabel').value.trim();
+  const amount=parseInt(document.getElementById('extraFeeAmount').value)||0;
+  if (!label){alert('費用名を入力してください');return;}
+  if (amount<=0){alert('金額を入力してください');return;}
+  editingExtraFees.push({label,amount});
+  document.getElementById('extraFeeLabel').value=''; document.getElementById('extraFeeAmount').value='';
+  renderExtraFeeList();
+}
+function removeExtraFee(i){editingExtraFees.splice(i,1);renderExtraFeeList();}
+function renderExtraFeeList(){
+  document.getElementById('extraFeeList').innerHTML=editingExtraFees.map((f,i)=>
+    `<div class="fee-list-item"><span>${esc(f.label)}</span><span style="font-weight:600;">¥${f.amount.toLocaleString()} <button type="button" onclick="removeExtraFee(${i})">✕</button></span></div>`
+  ).join('');
+}
+function savePayment(){
+  const db=getDB(), sid=document.getElementById('payStudentId').value;
+  const y=currentMonth.getFullYear(), m=currentMonth.getMonth()+1, k=payKey(sid,y,m);
+  const paid=document.getElementById('payPaid').checked;
+  const amount=Math.max(0,parseInt(document.getElementById('payAmount').value)||0);
+  let pay=db.payments.find(p=>p.key===k);
+  if (!pay){pay={key:k,studentId:sid,year:y,month:m};db.payments.push(pay);}
+  pay.paid=paid; pay.amount=amount;
+  pay.paidDate=paid?document.getElementById('payDate').value:null;
+  pay.extraFees=[...editingExtraFees]; pay.note=document.getElementById('payNote').value.trim();
+  saveDB(db); closeModal('modalPayment'); renderPayments(); renderSummary();
+}
+
+// ===== Summary =====
+function renderSummary(){
+  const db=getDB(), y=summaryMonth.getFullYear(), m=summaryMonth.getMonth()+1, matFee=getMatFee(m);
+  if (!db.students.length){
+    document.getElementById('summaryContent').innerHTML=`<div class="empty"><div class="empty-icon">📊</div><p>生徒を追加すると集計が表示されます</p></div>`;
+    return;
+  }
+  const stats=list=>{
+    let total=0,collected=0,paidCount=0;
+    list.forEach(s=>{
+      const pay=getPay(db,s.id,y,m);
+      const base=pay?pay.amount:s.monthlyFee;
+      const ext=pay&&pay.extraFees?pay.extraFees.reduce((a,e)=>a+e.amount,0):0;
+      total+=base+ext+(!pay?matFee:0);
+      if (pay&&pay.paid) {collected+=base+ext; paidCount++;}
+    });
+    return {total,collected,uncollected:total-collected,count:list.length,paidCount};
+  };
+  const all=stats(db.students), ng=stats(db.students.filter(s=>s.classroom==='頓野')), kr=stats(db.students.filter(s=>s.classroom==='鞍手'));
+  const pct=all.total>0?Math.round(all.collected/all.total*100):0, col=pct===100?'success':'primary';
+  const unpaid=db.students.filter(s=>{const p=getPay(db,s.id,y,m);return !p||!p.paid;});
+  const matBanner=matFee>0?`<div style="margin:0 12px;padding:8px 14px;background:#fff0eb;border-radius:10px;border:1px solid #f5cba7;font-size:13px;font-weight:600;color:var(--danger);">📚 教材費月 — 月謝に +¥${matFee.toLocaleString()} 自動加算</div>`:'';
+  const unpaidHtml=unpaid.length===0
+    ?`<div class="section" style="margin:0 12px 12px;"><div style="padding:20px;text-align:center;color:var(--success);font-weight:700;font-size:16px;">🎉 全員収納済みです！</div></div>`
+    :`<div class="section" style="margin:0 12px 12px;"><div class="section-header"><span class="section-title" style="color:var(--danger)">未収一覧（${unpaid.length}名）</span></div>`
+      +unpaid.map(s=>{const cls=s.classroom==='頓野'?'nogata':'kurate';const p=getPay(db,s.id,y,m);const amt=p?p.amount+(p.extraFees||[]).reduce((a,e)=>a+e.amount,0):s.monthlyFee+matFee;return `<div class="pay-item"><div class="classroom-dot dot-${cls}"></div><div style="flex:1;"><div style="font-weight:600;font-size:14px;">${esc(s.name)}</div><span class="classroom-tag tag-${cls}">${s.classroom}</span></div><div style="font-weight:700;color:var(--danger);">¥${amt.toLocaleString()}</div></div>`;}).join('')+'</div>';
+  document.getElementById('summaryContent').innerHTML=`
+    <div class="summary-grid">
+      <div class="summary-card full">
+        <div class="summary-card-label">収納率（全体）</div>
+        <div style="display:flex;align-items:baseline;gap:8px;"><div class="summary-card-value ${col}">${pct}%</div><div style="font-size:13px;color:var(--text-sub);">${all.paidCount}/${all.count}名</div></div>
+        <div style="margin-top:8px;background:var(--border);border-radius:4px;height:8px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:var(--${col});border-radius:4px;transition:width 0.4s;"></div></div>
+      </div>
+      <div class="summary-card"><div class="summary-card-label">収納済</div><div class="summary-card-value success">¥${all.collected.toLocaleString()}</div></div>
+      <div class="summary-card"><div class="summary-card-label">未収</div><div class="summary-card-value ${all.uncollected>0?'danger':'success'}">¥${all.uncollected.toLocaleString()}</div></div>
+      <div class="summary-card"><div class="summary-card-label" style="color:var(--nogata)">頓野教室</div><div class="summary-card-value" style="font-size:18px;">¥${ng.collected.toLocaleString()}</div><div style="font-size:12px;color:var(--text-sub);">未収 ¥${ng.uncollected.toLocaleString()} / ${ng.paidCount}/${ng.count}名</div></div>
+      <div class="summary-card"><div class="summary-card-label" style="color:var(--kurate)">鞍手教室</div><div class="summary-card-value" style="font-size:18px;">¥${kr.collected.toLocaleString()}</div><div style="font-size:12px;color:var(--text-sub);">未収 ¥${kr.uncollected.toLocaleString()} / ${kr.paidCount}/${kr.count}名</div></div>
+    </div>
+    ${matBanner}<div style="height:12px;"></div>${unpaidHtml}`;
+}
+
+// ===== Student Modal =====
+function buildCourseSelect(selectId, currentValue){
+  const db=getDB(), el=document.getElementById(selectId);
+  el.innerHTML=db.courses.map(c=>`<option value="${esc(c.name)}" data-fee="${c.fee}">${esc(c.name)}（¥${c.fee.toLocaleString()}）</option>`).join('')+`<option value="__custom__">その他（カスタム）</option>`;
+  const found=[...el.options].find(o=>o.value===currentValue);
+  if (found){el.value=currentValue;}
+  else if (currentValue&&currentValue!=='__custom__'){const opt=new Option(currentValue,currentValue,true,true);el.insertBefore(opt,el.lastElementChild);el.value=currentValue;}
+}
+function onCourseChange(){
+  const el=document.getElementById('sFeeType'), sel=el.options[el.selectedIndex];
+  if (el.value!=='__custom__'&&sel.dataset.fee) document.getElementById('sMonthlyFee').value=sel.dataset.fee;
+}
+function onBirthDateChange() {
+  const val = document.getElementById('sBirthDate').value;
+  const grade = calcGrade(val);
+  const noteEl = document.getElementById('gradeAutoNote');
+  if (grade) {
+    document.getElementById('sGrade').value = grade;
+    noteEl.style.display = 'block';
+  } else {
+    noteEl.style.display = 'none';
+  }
+}
+function openAddStudent(){
+  document.getElementById('modalStudentTitle').textContent='生徒を追加';
+  document.getElementById('editStudentId').value='';
+  document.getElementById('sName').value='';
+  document.getElementById('cls-nogata').checked=true; document.getElementById('cls-kurate').checked=false;
+  document.getElementById('sNote').value='';
+  document.getElementById('sFurigana').value='';
+  document.getElementById('sBirthDate').value='';
+  document.getElementById('sGrade').value='';
+  document.getElementById('gradeAutoNote').style.display='none';
+  document.getElementById('deleteZone').style.display='none';
+  const db=getDB(); buildCourseSelect('sFeeType',db.courses[0]?db.courses[0].name:'');
+  document.getElementById('sMonthlyFee').value=db.courses[0]?db.courses[0].fee:0;
+  openModal('modalStudent');
+}
+function openEditStudent(id){
+  const db=getDB(), s=db.students.find(s=>s.id===id); if (!s) return;
+  document.getElementById('modalStudentTitle').textContent='生徒を編集';
+  document.getElementById('editStudentId').value=id;
+  document.getElementById('sName').value=s.name;
+  document.getElementById('cls-nogata').checked=s.classroom==='頓野';
+  document.getElementById('cls-kurate').checked=s.classroom==='鞍手';
+  document.getElementById('sNote').value=s.note||'';
+  document.getElementById('sFurigana').value=s.furigana||'';
+  document.getElementById('sBirthDate').value=s.birthDate||'';
+  document.getElementById('sGrade').value=s.grade||'';
+  document.getElementById('gradeAutoNote').style.display=s.birthDate?'block':'none';
+  document.getElementById('deleteZone').style.display='block';
+  buildCourseSelect('sFeeType',s.feeType); document.getElementById('sMonthlyFee').value=s.monthlyFee;
+  openModal('modalStudent');
+}
+function saveStudent(){
+  const name=document.getElementById('sName').value.trim();
+  if (!name){alert('お名前を入力してください');return;}
+  const clsEl=document.querySelector('input[name="sClassroom"]:checked');
+  if (!clsEl){alert('教室を選択してください');return;}
+  let feeType=document.getElementById('sFeeType').value;
+  if (feeType==='__custom__') feeType='カスタム';
+  const monthlyFee=Math.max(0,parseInt(document.getElementById('sMonthlyFee').value)||0);
+  const note=document.getElementById('sNote').value.trim();
+  const furigana=document.getElementById('sFurigana').value.trim();
+  const birthDate=document.getElementById('sBirthDate').value||null;
+  const grade=document.getElementById('sGrade').value||'';
+  const db=getDB(), id=document.getElementById('editStudentId').value;
+  if (id){const s=db.students.find(s=>s.id===id);if (!s){alert('生徒が見つかりませんでした');return;}Object.assign(s,{name,furigana,classroom:clsEl.value,feeType,monthlyFee,note,birthDate,grade});}
+  else db.students.push({id:uuid(),name,furigana,classroom:clsEl.value,feeType,monthlyFee,note,birthDate,grade,createdAt:new Date().toISOString()});
+  saveDB(db); closeModal('modalStudent'); updateHeaderSub(); renderStudents(); renderPayments(); renderSummary();
+}
+function confirmDeleteStudent(){
+  const id=document.getElementById('editStudentId').value, db=getDB(), s=db.students.find(s=>s.id===id);
+  if (!s) return;
+  if (!confirm(`「${s.name}」を削除しますか？\n関連する支払い記録もすべて削除されます。`)) return;
+  db.students=db.students.filter(s=>s.id!==id); db.payments=db.payments.filter(p=>p.studentId!==id);
+  saveDB(db); closeModal('modalStudent'); updateHeaderSub(); renderStudents(); renderPayments(); renderSummary();
+}
+
+// ===== Course Management =====
+function openCourses(){ renderCourseList(); renderMatSettings(); document.getElementById('newCourseName').value=''; document.getElementById('newCourseFee').value=''; openModal('modalCourses'); }
+function renderCourseList(){
+  const db=getDB(), el=document.getElementById('courseList');
+  if (!db.courses.length){el.innerHTML=`<div style="padding:20px;text-align:center;color:var(--text-sub);">コースがありません</div>`;return;}
+  el.innerHTML=db.courses.map(c=>`<div class="course-item"><div class="course-item-info"><div class="course-item-name">${esc(c.name)}</div><div class="course-item-fee">標準月謝 ¥${c.fee.toLocaleString()}</div></div><button class="course-edit-btn" type="button" onclick="openEditCourse('${c.id}')">編集</button></div>`).join('');
+}
+function addCourse(){
+  const name=document.getElementById('newCourseName').value.trim(), fee=Math.max(0,parseInt(document.getElementById('newCourseFee').value)||0);
+  if (!name){alert('コース名を入力してください');return;}
+  const db=getDB();
+  if (db.courses.find(c=>c.name===name)){alert('同じ名前のコースがすでにあります');return;}
+  db.courses.push({id:uuid(),name,fee}); saveDB(db);
+  document.getElementById('newCourseName').value=''; document.getElementById('newCourseFee').value=''; renderCourseList();
+}
+function openEditCourse(id){
+  const db=getDB(), c=db.courses.find(c=>c.id===id); if (!c) return;
+  document.getElementById('editCourseId').value=id; document.getElementById('editCourseName').value=c.name; document.getElementById('editCourseFee').value=c.fee;
+  openModal('modalEditCourse');
+}
+function saveCourseEdit(){
+  const id=document.getElementById('editCourseId').value, name=document.getElementById('editCourseName').value.trim(), fee=Math.max(0,parseInt(document.getElementById('editCourseFee').value)||0);
+  if (!name){alert('コース名を入力してください');return;}
+  const db=getDB(), c=db.courses.find(c=>c.id===id); if (!c) return;
+  const old=c.name; c.name=name; c.fee=fee; db.students.forEach(s=>{if(s.feeType===old)s.feeType=name;});
+  saveDB(db); closeModal('modalEditCourse'); renderCourseList(); renderStudents();
+}
+function deleteCourse(){
+  const id=document.getElementById('editCourseId').value, db=getDB(), c=db.courses.find(c=>c.id===id); if (!c) return;
+  if (!confirm(`「${c.name}」を削除しますか？`)) return;
+  db.courses=db.courses.filter(c=>c.id!==id); saveDB(db); closeModal('modalEditCourse'); renderCourseList();
+}
+function renderMatSettings(){
+  const db=getDB(), cfg=db.matFee||DEFAULT_MAT;
+  document.getElementById('matFeeAmount').value=cfg.amount||0;
+  document.getElementById('matMonthToggle').innerHTML=Array.from({length:12},(_,i)=>i+1).map(m=>`<button type="button" class="month-chip ${cfg.months.includes(m)?'on':''}" onclick="this.classList.toggle('on')">${m}月</button>`).join('');
+}
+function saveMatSettings(){
+  const db=getDB(); if (!db.matFee) db.matFee=Object.assign({},DEFAULT_MAT);
+  db.matFee.months=[...document.querySelectorAll('#matMonthToggle .month-chip.on')].map(b=>parseInt(b.textContent));
+  db.matFee.amount=Math.max(0,parseInt(document.getElementById('matFeeAmount').value)||0);
+  saveDB(db); alert('教材費設定を保存しました'); renderPayments(); renderSummary();
+}
+
+// ===== Template Download =====
+function downloadTemplate(){
+  if (typeof XLSX==='undefined'){
+    const csv='\uFEFF'+[
+      ['氏名','ふりがな','教室','コース','月謝（円）','生年月日','学年','備考'],
+      ['※氏名は必須です','例：たなか たろう（任意）','頓野 または 鞍手','コース名を入力','半角数字','例：2015/06/01（任意）','例：小4（任意）','任意'],
+      ['田中 太郎','たなか たろう','頓野','そろばん','5000','2015/06/01','小4',''],
+      ['山田 花子','やまだ はなこ','鞍手','そろばん＋書写','6000','','中1','兄弟割引'],
+    ].map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+    const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(new Blob([csv],{type:'text/csv'})),download:'生徒名簿_テンプレート.csv'});
+    a.click(); return;
+  }
+
+  const db = getDB();
+  const wb = XLSX.utils.book_new();
+
+  // Sheet 1: 入力シート
+  const headers = ['氏名', 'ふりがな', '教室', 'コース', '月謝（円）', '生年月日', '学年', '備考'];
+  const notes   = ['※必須', '例：たなか たろう（任意）', '頓野 または 鞍手', 'コース名（省略可）', '半角数字（省略時はコース標準額）', '例：2015/06/01（任意）', '例：小4（任意）', '任意'];
+  const examples = [
+    ['田中 太郎', 'たなか たろう', '頓野', 'そろばん', 5000, '2015/06/01', '小4', ''],
+    ['山田 花子', 'やまだ はなこ', '鞍手', 'そろばん＋書写', 6000, '', '中1', '兄弟割引'],
+    ['佐藤 次郎', 'さとう じろう', '頓野', 'そろばん', 5000, '2018/03/20', '小2', ''],
+  ];
+  const wsInput = XLSX.utils.aoa_to_sheet([headers, notes, ...examples]);
+  wsInput['!cols'] = [{wch:16},{wch:18},{wch:10},{wch:18},{wch:12},{wch:16},{wch:8},{wch:20}];
+  XLSX.utils.book_append_sheet(wb, wsInput, '生徒名簿');
+
+  // Sheet 2: コース一覧
+  const wsCourse = XLSX.utils.aoa_to_sheet([
+    ['登録済みコース一覧（参考）'],
+    ['コース名', '標準月謝'],
+    ...db.courses.map(c => [c.name, c.fee]),
+  ]);
+  wsCourse['!cols'] = [{wch:20},{wch:12}];
+  XLSX.utils.book_append_sheet(wb, wsCourse, 'コース一覧');
+
+  // Sheet 3: 説明
+  const wsHelp = XLSX.utils.aoa_to_sheet([
+    ['【入力方法】'],[''],
+    ['■ 入力シートの2行目（説明行）は削除してから入力してください。'],
+    ['■ 3行目以降にデータを入力（サンプル行は上書きOK）。'],[''],
+    ['■ 氏名（A列）：必須。'],
+    ['■ ふりがな（B列）：任意。あいうえお順で並び替えるために使用します。'],
+    ['■ 教室（C列）：「頓野」または「鞍手」を入力。'],
+    ['■ コース（D列）：省略可（未設定になります）。'],
+    ['■ 月謝（E列）：半角数字。省略時はコース標準額。'],
+    ['■ 生年月日（F列）：yyyy/mm/dd形式（任意）。入力すると学年が自動計算されます。'],
+    ['■ 学年（G列）：任意。生年月日があれば自動計算。手動入力も可（例：小4）。'],
+    ['■ 備考（H列）：自由記入。'],[''],
+    ['■ 同じ氏名の生徒が既に登録されている場合は情報が更新されます。'],
+  ]);
+  wsHelp['!cols'] = [{wch:65}];
+  XLSX.utils.book_append_sheet(wb, wsHelp, '入力方法');
+
+  XLSX.writeFile(wb, '生徒名簿_テンプレート.xlsx');
+}
+
+// ===== Excel / CSV Import =====
+function onImportFileSelected(event){
+  const file = event.target.files[0]; if (!file) return;
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (ext === 'csv') {
+    const reader = new FileReader();
+    reader.onload = e => processImportRows(parseCSV(e.target.result));
+    reader.readAsText(file, 'UTF-8');
+  } else {
+    if (typeof XLSX === 'undefined') { alert('Excelファイルの読み込みにはインターネット接続が必要です。\nCSV形式（.csv）でお試しください。'); return; }
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const wb = XLSX.read(e.target.result, { type:'array' });
+        const wsName = wb.SheetNames.find(n=>n==='生徒名簿') || wb.SheetNames[0];
+        processImportRows(XLSX.utils.sheet_to_json(wb.Sheets[wsName], { header:1, defval:'' }));
+      } catch(err) { alert('ファイルの読み込みに失敗しました：' + err.message); }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+  event.target.value = '';
+}
+
+function parseCSV(text) {
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  return text.split(/\r?\n/).map(line => {
+    const cols = []; let cur = '', inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') { if (inQ && line[i+1] === '"') { cur += '"'; i++; } else inQ = !inQ; }
+      else if (ch === ',' && !inQ) { cols.push(cur); cur = ''; }
+      else cur += ch;
+    }
+    cols.push(cur); return cols;
+  });
+}
+
+function processImportRows(rawRows) {
+  if (!rawRows || rawRows.length < 2) { alert('データが見つかりませんでした'); return; }
+  let headerIdx = -1;
+  for (let i = 0; i < Math.min(3, rawRows.length); i++) {
+    if (rawRows[i].some(c => String(c).trim() === '氏名')) { headerIdx = i; break; }
+  }
+  if (headerIdx < 0) { alert('「氏名」列が見つかりません。\nテンプレートの形式を確認してください。'); return; }
+
+  const headers = rawRows[headerIdx].map(h => String(h).trim());
+  const ci = {
+    name:      headers.findIndex(h=>h==='氏名'),
+    furigana:  headers.findIndex(h=>h.includes('ふりがな')||h.includes('フリガナ')||h==='読み'),
+    classroom: headers.findIndex(h=>h==='教室'),
+    course:    headers.findIndex(h=>['コース','コース名'].includes(h)),
+    fee:       headers.findIndex(h=>h.includes('月謝')),
+    birthDate: headers.findIndex(h=>h.includes('生年月日')),
+    grade:     headers.findIndex(h=>h==='学年'),
+    note:      headers.findIndex(h=>h==='備考'),
+  };
+  if (ci.name < 0) { alert('「氏名」列が見つかりません'); return; }
+
+  const db = getDB();
+  const parsed = [];
+
+  for (let i = headerIdx + 1; i < rawRows.length; i++) {
+    const row = rawRows[i];
+    const name = String(row[ci.name]||'').trim();
+    if (!name || name.startsWith('※')) continue;
+
+    const furigana  = ci.furigana>=0   ? String(row[ci.furigana]||'').trim()  : '';
+    const classroom = ci.classroom>=0 ? String(row[ci.classroom]||'').trim() : '';
+    const course    = ci.course>=0    ? String(row[ci.course]||'').trim()    : '';
+    const feeRaw    = ci.fee>=0       ? row[ci.fee]                          : '';
+    const birthDateRaw = ci.birthDate>=0 ? String(row[ci.birthDate]||'').trim() : '';
+    const gradeRaw  = ci.grade>=0     ? String(row[ci.grade]||'').trim()     : '';
+    const note      = ci.note>=0      ? String(row[ci.note]||'').trim()      : '';
+
+    let monthlyFee = parseInt(String(feeRaw).replace(/[^\d]/g,'')) || 0;
+    if (!monthlyFee && course) { const c = db.courses.find(c=>c.name===course); if (c) monthlyFee = c.fee; }
+
+    // Normalise birthDate to YYYY-MM-DD
+    let birthDate = null;
+    if (birthDateRaw) {
+      const cleaned = birthDateRaw.replace(/\//g,'-').replace(/年/g,'-').replace(/月/g,'-').replace(/日/g,'');
+      if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(cleaned)) birthDate = cleaned;
+    }
+
+    // Resolve grade: auto from birthDate, else use column value
+    let grade = gradeRaw || (birthDate ? calcGrade(birthDate) : '');
+
+    // Validate — accept both 頓野 and 直方 (legacy) for classroom
+    const normClassroom = classroom === '直方' ? '頓野' : classroom;
+    let status = 'ok', errors = [];
+    if (!['頓野','鞍手'].includes(normClassroom)) errors.push('教室が「頓野」または「鞍手」以外');
+    if (errors.length) status = 'err';
+
+    const existing = db.students.find(s=>s.name===name);
+    if (!errors.length) status = existing ? 'update' : 'new';
+
+    parsed.push({ name, furigana, classroom:normClassroom, course:course||'未設定', monthlyFee, birthDate, grade, note, status, errors, existing });
+  }
+
+  if (!parsed.length) { alert('取り込めるデータがありませんでした'); return; }
+  pendingImportRows = parsed;
+  showImportPreview(parsed);
+}
+
+function showImportPreview(rows) {
+  const newCount=rows.filter(r=>r.status==='new').length, updCount=rows.filter(r=>r.status==='update').length, errCount=rows.filter(r=>r.status==='err').length;
+  document.getElementById('importSummary').innerHTML = `
+    <div class="import-stat"><div class="import-stat-num" style="color:var(--success)">${newCount}</div><div class="import-stat-label">新規追加</div></div>
+    <div class="import-stat"><div class="import-stat-num" style="color:var(--nogata)">${updCount}</div><div class="import-stat-label">情報更新</div></div>
+    <div class="import-stat"><div class="import-stat-num" style="color:var(--danger)">${errCount}</div><div class="import-stat-label">エラー（スキップ）</div></div>
+    <div class="import-stat"><div class="import-stat-num">${rows.length}</div><div class="import-stat-label">合計行数</div></div>`;
+  const thead = `<thead><tr><th>状態</th><th>氏名</th><th>ふりがな</th><th>教室</th><th>コース</th><th>月謝</th><th>学年</th><th>備考</th></tr></thead>`;
+  const tbody = '<tbody>'+rows.map(r=>{
+    const tagClass=r.status==='new'?'new':r.status==='update'?'update':'err';
+    const tagLabel=r.status==='new'?'新規':r.status==='update'?'更新':'エラー';
+    const rowClass=r.status==='err'?'row-err':r.status==='update'?'row-warn':'row-ok';
+    const errText=r.errors.length?`<br><span style="font-size:10px;color:var(--danger)">${r.errors.join('、')}</span>`:'';
+    return `<tr class="${rowClass}"><td><span class="row-tag ${tagClass}">${tagLabel}</span></td><td>${esc(r.name)}${errText}</td><td>${esc(r.furigana||'')}</td><td>${esc(r.classroom)}</td><td>${esc(r.course)}</td><td>${r.monthlyFee?'¥'+r.monthlyFee.toLocaleString():'-'}</td><td>${esc(r.grade)}</td><td>${esc(r.note)}</td></tr>`;
+  }).join('')+'</tbody>';
+  document.getElementById('importPreviewTable').innerHTML = thead+tbody;
+  document.getElementById('importConfirmBtn').disabled = (newCount+updCount)===0;
+  if (errCount>0){document.getElementById('importErrorNote').style.display='block';document.getElementById('importErrorNote').textContent=`※ エラー行（${errCount}件）はスキップされます`;}
+  else document.getElementById('importErrorNote').style.display='none';
+  closeModal('modalExport');
+  openModal('modalImportPreview');
+}
+
+function confirmImport() {
+  const db = getDB(); let added=0, updated=0;
+  pendingImportRows.forEach(r=>{
+    if (r.status==='err') return;
+    if (r.status==='update'&&r.existing) {
+      // Find the student in the freshly loaded db (r.existing is a stale reference)
+      const s = db.students.find(st=>st.id===r.existing.id);
+      if (s) {
+        Object.assign(s,{classroom:r.classroom,feeType:r.course,monthlyFee:r.monthlyFee,furigana:r.furigana||'',birthDate:r.birthDate,grade:r.grade,note:r.note});
+        updated++;
+      }
+    } else if (r.status==='new') {
+      db.students.push({id:uuid(),name:r.name,furigana:r.furigana||'',classroom:r.classroom,feeType:r.course,monthlyFee:r.monthlyFee,birthDate:r.birthDate,grade:r.grade,note:r.note,createdAt:new Date().toISOString()});
+      added++;
+    }
+  });
+  saveDB(db); closeModal('modalImportPreview');
+  updateHeaderSub(); renderStudents(); renderPayments(); renderSummary();
+  alert(`取り込み完了\n新規追加：${added}名　情報更新：${updated}名`);
+  pendingImportRows=[];
+}
+
+// ===== Export =====
+function showExport(){
+  const now=new Date(), ySelect=document.getElementById('exportYear'), yaSelect=document.getElementById('exportYearAnnual');
+  ySelect.innerHTML=''; yaSelect.innerHTML='';
+  for (let y=now.getFullYear()-1;y<=now.getFullYear()+1;y++) {
+    ySelect.appendChild(new Option(y+'年',y,false,y===now.getFullYear()));
+    yaSelect.appendChild(new Option(y+'年',y,false,y===now.getFullYear()));
+  }
+  document.getElementById('exportMonth').value=now.getMonth()+1;
+  openModal('modalExport');
+}
+
+function exportCSV(){
+  const db=getDB(), y=parseInt(document.getElementById('exportYear').value), m=parseInt(document.getElementById('exportMonth').value), mf=getMatFee(m);
+  const rows=[['氏名','教室','学年','コース','月謝','追加費用','合計','収納状況','受領日','メモ']];
+  db.students.slice().sort((a,b)=>a.name.localeCompare(b.name,'ja')).forEach(s=>{
+    const pay=getPay(db,s.id,y,m), base=pay?pay.amount:s.monthlyFee, ext=pay&&pay.extraFees?pay.extraFees.reduce((a,e)=>a+e.amount,0):mf;
+    rows.push([s.name,s.classroom,s.grade||'',s.feeType,base,ext,base+ext,pay&&pay.paid?'収納済':'未収',pay&&pay.paidDate?pay.paidDate:'',pay&&pay.note?pay.note:'']);
+  });
+  const csv='\uFEFF'+rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  Object.assign(document.createElement('a'),{href:URL.createObjectURL(new Blob([csv],{type:'text/csv'})),download:`月謝_${y}年${m}月.csv`}).click();
+}
+
+function exportAnnualCSV(){
+  const db=getDB(), y=parseInt(document.getElementById('exportYearAnnual').value);
+  const months=[1,2,3,4,5,6,7,8,9,10,11,12];
+  const header=['氏名','教室','学年','コース','基本月謝',...months.map(m=>`${m}月`),'年間収納合計','年間未収合計'];
+  const rows=[header];
+  db.students.slice().sort((a,b)=>a.name.localeCompare(b.name,'ja')).forEach(s=>{
+    let annualPaid=0, annualUnpaid=0;
+    const mCols=months.map(m=>{
+      const mf=getMatFee(m), pay=getPay(db,s.id,y,m);
+      const base=pay?pay.amount:s.monthlyFee;
+      const ext=pay&&pay.extraFees?pay.extraFees.reduce((a,e)=>a+e.amount,0):(pay?0:mf);
+      const total=base+ext;
+      if (pay&&pay.paid){annualPaid+=total; return '収納済';}
+      annualUnpaid+=total; return '未収';
+    });
+    rows.push([s.name,s.classroom,s.grade||'',s.feeType,s.monthlyFee,...mCols,annualPaid,annualUnpaid]);
+  });
+  const csv='\uFEFF'+rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  Object.assign(document.createElement('a'),{href:URL.createObjectURL(new Blob([csv],{type:'text/csv'})),download:`月謝年次_${y}年.csv`}).click();
+}
+
+function exportJSON(){
+  const db=getDB();
+  Object.assign(document.createElement('a'),{href:URL.createObjectURL(new Blob([JSON.stringify(db,null,2)],{type:'application/json'})),download:`soroban_backup_${new Date().toISOString().slice(0,10)}.json`}).click();
+}
+function importJSON(e){
+  const file=e.target.files[0]; if (!file) return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    try {
+      const data=JSON.parse(ev.target.result);
+      if (!data.students||!data.payments) throw new Error('invalid');
+      if (!data.courses) data.courses=DEFAULT_COURSES.slice();
+      if (!data.matFee) data.matFee=Object.assign({},DEFAULT_MAT);
+      if (!confirm(`データを読み込みます。\n現在のデータは上書きされます。\n生徒数: ${data.students.length}名`)) return;
+      saveDB(data); closeModal('modalExport'); updateHeaderSub(); renderStudents(); renderPayments(); renderSummary();
+      alert('読み込み完了しました');
+    } catch { alert('ファイルの形式が正しくありません'); }
+  };
+  reader.readAsText(file); e.target.value='';
+}
+
+// ===== Modal Helpers =====
+function openModal(id){document.getElementById(id).classList.add('open');document.body.style.overflow='hidden';}
+function closeModal(id){document.getElementById(id).classList.remove('open');document.body.style.overflow='';}
+document.querySelectorAll('.modal-overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)closeModal(o.id);}));
+
+init();
+</script>
+</body>
+</html>
